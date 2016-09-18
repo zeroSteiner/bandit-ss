@@ -541,4 +541,9 @@ def gen_blacklist():
         'or perform hostname checks.'
         ))
 
+    sets.append(utils.build_conf_dict(
+        'pty', 'B390', ['pty.spawn'],
+        'Pty spawn call appears to be in use, possible security issue.'
+	))
+
     return {'Call': sets}

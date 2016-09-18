@@ -268,4 +268,10 @@ def gen_blacklist():
         '{name} module.', 'HIGH'
         ))
 
+    sets.append(utils.build_conf_dict(
+        'import_plumbum', 'B490', ['plumbum'],
+        'Using the {name} module generally involves executing shell commands',
+        'HIGH'
+    ))
+
     return {'Import': sets, 'ImportFrom': sets, 'Call': sets}
