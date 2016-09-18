@@ -221,7 +221,7 @@ def iter_method_classes(parent, call_node, child=None, import_aliases=None):
 		# the init_node is the one in which the class is initialized
 		# all expr nodes should be either call (Name or Attribute) or Name
 		if not isinstance(init_node, ast.Call):
-			raise ValueError('an init_node was not a call')
+			continue
 		if isinstance(init_node.func, ast.Attribute):
 			klass_name = init_node.func.attr
 			for def_node in get_definition_nodes(parent, init_node.func.value, child=init_node):
@@ -354,3 +354,16 @@ def report_hardcoded_credentials(lib_name, username=None, password=None):
 			confidence=bandit.MEDIUM,
 			text="A hard-coded password is being passed to the {0} library for authentication.".format(lib_name)
 		)
+
+def report_method_auth_literal(libname, context, username, password, classes):
+	call_node = context.node
+	parent = get_top_parent_node(call_node)
+	klass_name = next(
+		(klass for klass in iter_method_classes(parent, call_node, import_aliases=context._context['import_aliases']) if klass in classes),
+		None
+	)
+	if klass_name is None:
+		return
+	username_node = next(get_call_arg_values(parent, call_node, arg=username[0], kwarg=username[1]), None)
+	password_node = next(get_call_arg_values(parent, call_node, arg=password[0], kwarg=password[1]), None)
+	return report_hardcoded_credentials(libname, username_node, password_node)

@@ -38,12 +38,6 @@ def dynamic_cmd_dispatch(context):
 	if not arg0 in ('os', 'popen2', 'subprocess'):
 		return
 
-	child = context.node; parent = s_utils.get_top_parent_node(child); name = child.args[1]
-	assigns = s_utils.get_definition_nodes(parent, name, child, prune=False)
-	print("node {0} assigned {1} times".format(name, len(assigns)))
-	for idx, node in enumerate(assigns):
-		print("  #{0:<3} L{1:<3} {2!r} {3!r}".format(idx, node.lineno, node, 'redacted'))
-
 	confidence = bandit.MEDIUM
 	if isinstance(arg1, ast.Str):
 		arg1 = arg1.s
@@ -102,26 +96,26 @@ def ftplib_auth_literal(context):
 		username = next(s_utils.get_call_arg_values(parent, call_node, arg=1, kwarg='user'), None)
 		password = next(s_utils.get_call_arg_values(parent, call_node, arg=2, kwarg='passwd'), None)
 	elif isinstance(call_node.func, ast.Attribute) and call_node.func.attr == 'login':
-		klass_name = next((klass for klass in s_utils.iter_method_classes(parent, call_node) if klass in ('ftplib.FTP', 'ftplib.FTP_TLS')), None)
+		klass_name = next(
+			(klass for klass in s_utils.iter_method_classes(parent, call_node, import_aliases=context._context['import_aliases']) if klass in ('ftplib.FTP', 'ftplib.FTP_TLS')),
+			None
+		)
 		if klass_name is None:
 			return
 		username = next(s_utils.get_call_arg_values(parent, call_node, arg=0, kwarg='user'), None)
 		password = next(s_utils.get_call_arg_values(parent, call_node, arg=1, kwarg='passwd'), None)
 	return s_utils.report_hardcoded_credentials('ftplib', username, password)
 
-
 @test.checks('Call')
 @test.test_id('SS0301')
 def smtplib_auth_literal(context):
-	username = None
-	password = None
 	call_node = context.node
-	parent = s_utils.get_top_parent_node(call_node)
-	if isinstance(call_node.func, ast.Attribute) and call_node.func.attr == 'login':
-		klass_name = next((klass for klass in s_utils.iter_method_classes(parent, call_node, import_aliases=context._context['import_aliases']) if klass in ('smtplib.SMTP', 'smtplib.SMTP_SSL')), None)
-		if klass_name is None:
-			return
-		username = next(s_utils.get_call_arg_values(parent, call_node, arg=0, kwarg='user'), None)
-		password = next(s_utils.get_call_arg_values(parent, call_node, arg=1, kwarg='password'), None)
-
-	return s_utils.report_hardcoded_credentials('smtplib', username, password)
+	if not (isinstance(call_node.func, ast.Attribute) and call_node.func.attr == 'login'):
+		return
+	return s_utils.report_method_auth_literal(
+		'smtplib',
+		context,
+		(0, 'user'),
+		(1, 'password'),
+		('smtplib.SMTP', 'smtplib.SMTP_SSL')
+	)

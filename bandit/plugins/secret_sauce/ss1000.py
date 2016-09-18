@@ -34,3 +34,17 @@ def requests_auth_literal(context):
 	password = next(s_utils.get_call_arg_values(parent, kwarg_nodes['auth'], arg=1, kwarg='password', child=call_node), None)
 
 	return s_utils.report_hardcoded_credentials('requests', username, password)
+
+@test.checks('Call')
+@test.test_id('SS1100')
+def paramiko_auth_literal(context):
+	call_node = context.node
+	if not (isinstance(call_node.func, ast.Attribute) and call_node.func.attr == 'connect'):
+		return
+	return s_utils.report_method_auth_literal(
+		'paramiko',
+		context,
+		(2, 'username'),
+		(3, 'password'),
+		('paramiko.SSHClient')
+	)
