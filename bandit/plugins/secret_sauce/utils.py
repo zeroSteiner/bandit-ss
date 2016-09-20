@@ -8,7 +8,16 @@ def get_attribute_name(node, import_aliases=None):
 	import_aliases = import_aliases or {}
 	if not isinstance(node, ast.Attribute):
 		raise ValueError('node must be an instance of ast.Attribute')
-	return import_aliases.get(node.value.id, node.value.id) + '.' + node.attr
+	base = node.attr
+	name = ''
+	node = node.value
+	while isinstance(node, ast.Attribute):
+		name = node.attr + '.' + name
+		node = node.value
+	if not isinstance(node, ast.Name):
+		raise ValueError('could not resolve node for attribute')
+	name = (node.id + '.' + name)[:-1]
+	return import_aliases.get(name, name) + '.' + base
 
 def get_definition_nodes(parent, name, child=None, prune=True):
 	"""
@@ -21,6 +30,8 @@ def get_definition_nodes(parent, name, child=None, prune=True):
 	:type child: ast.Node
 	:param bool prune: Prune definition nodes prior to the last node known to be executed.
 	"""
+	if isinstance(name, ast.Attribute):
+		name = get_attribute_name(name)
 	if isinstance(name, ast.Name):
 		name = name.id
 	assign_nodes = collections.deque()
@@ -78,6 +89,7 @@ def get_definition_nodes(parent, name, child=None, prune=True):
 
 		# prune the subnodes to check so we're not including ones past the child
 		if next_node in check_nodes:
+			# todo: adjust pruning for proper namespace handling
 			check_nodes = check_nodes[:check_nodes.index(next_node)]
 		for node in check_nodes:
 			if isinstance(node, ast.Assign):
@@ -223,10 +235,10 @@ def iter_method_classes(parent, call_node, child=None, import_aliases=None):
 		if not isinstance(init_node, ast.Call):
 			continue
 		if isinstance(init_node.func, ast.Attribute):
-			klass_name = init_node.func.attr
+			module_name, klass_name = get_attribute_name(init_node.func).rsplit('.', 1)
 			for def_node in get_definition_nodes(parent, init_node.func.value, child=init_node):
 				if isinstance(def_node, (ast.Import, ast.ImportFrom)):
-					yield import_aliases.get(init_node.func.value.id, init_node.func.value.id) + '.' + klass_name
+					yield import_aliases.get(module_name, module_name) + '.' + klass_name
 		elif isinstance(init_node.func, ast.Name):
 			for klass_node in iter_expr_values(parent, init_node.func):
 				if isinstance(klass_node, ast.Attribute):
@@ -250,6 +262,20 @@ def get_call_arg_values(parent, call_node, arg=None, kwarg=None, child=None):
 		arg_node = next((kw.value for kw in call_node.keywords if kw.arg == kwarg), None)
 	for arg_value in iter_expr_literal_values(parent, arg_node, child=child):
 		yield arg_value
+
+def get_call_attr_chain(call_node):
+	"""
+	Get the chain associated with calls to various attributes. The chain is
+	returned in the order in which the nodes will be executed.
+	"""
+	calls = collections.deque()
+	calls.appendleft(call_node)
+	if not isinstance(call_node, ast.Call):
+		raise ValueError('call_node must be an ast.Call instance')
+	while isinstance(call_node.func, ast.Attribute) and isinstance(call_node.func.value, ast.Call):
+		call_node = call_node.func.value
+		calls.appendleft(call_node)
+	return calls
 
 def get_method_class(parent, call_node, child=None):
 	return next(iter_method_classes(parent, call_node, child=child), None)
