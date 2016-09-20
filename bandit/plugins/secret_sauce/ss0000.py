@@ -119,3 +119,34 @@ def smtplib_auth_literal(context):
 		(1, 'password'),
 		('smtplib.SMTP', 'smtplib.SMTP_SSL')
 	)
+
+@test.checks('Str')
+@test.test_id('SS0302')
+def basic_auth_literal(context):
+	str_node = context.node
+	if re.match(r'^basic\s+', str_node.s, flags=re.IGNORECASE) is None:
+		return
+	issue = bandit.Issue(
+		severity=bandit.HIGH,
+		confidence=bandit.MEDIUM,
+		text='A hard-coded string is being used as an HTTP basic authorization header'
+	)
+	if re.match(r'^basic\s+[\w]{2,}={0,2}$', str_node.s, flags=re.IGNORECASE):
+		return issue
+	if not isinstance(str_node.parent, ast.BinOp):
+		return
+	binop_node = str_node.parent
+	if not (isinstance(binop_node.op, (ast.Add, ast.Mod)) and binop_node.left == str_node):
+		return
+	parent = s_utils.get_top_parent_node(context.node)
+	header_value = None
+	if isinstance(binop_node.right, ast.Call):
+		call_name = b_utils.get_call_name(binop_node.right, context._context['import_aliases'])
+		if re.match(r'base64.(standard_|urlsafe_)?b64encode', call_name) is None:
+			return
+		header_value = next((value for value in s_utils.get_call_arg_values(parent, binop_node.right, arg=0) if isinstance(value, (str, bytes))), None)
+	elif isinstance(binop_node.right, (ast.Name, ast.Str)):
+		header_value = next((value for value in s_utils.iter_expr_literal_values(parent, binop_node.right) if isinstance(value, (str, bytes))), None)
+	if header_value is None:
+		return
+	return issue
