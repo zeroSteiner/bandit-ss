@@ -260,6 +260,10 @@ def get_call_arg_values(parent, call_node, arg=None, kwarg=None, child=None):
 		if not isinstance(kwarg, str):
 			raise ValueError('kwarg must be specified as the string of a keyword argument name')
 		arg_node = next((kw.value for kw in call_node.keywords if kw.arg == kwarg), None)
+	if arg_node is None:
+		return
+	if not hasattr(arg_node, 'parent'):
+		arg_node.parent = call_node
 	for arg_value in iter_expr_literal_values(parent, arg_node, child=child):
 		yield arg_value
 
