@@ -17,3 +17,5 @@ doc/source/api
 .*.sw?
 AUTHORS
 releasenotes/build
+*.xlsx
+*.xlsx#

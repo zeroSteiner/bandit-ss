@@ -213,3 +213,29 @@ def basic_auth_literal(context):
 	if header_value is None:
 		return
 	return issue
+
+@test.checks('Call')
+@test.test_id('SS0400')
+def insecure_hashlib_new_algorithm(context):
+	call_node = context.node
+	if not (context.call_function_name_qual == 'hashlib.new' and len(call_node.args)):
+		return
+	arg0 = call_node.args[0]
+	parent = s_utils.get_top_parent_node(call_node)
+	insecure_algorithms = ('md2', 'md4', 'md5')
+	confidence = None
+	if isinstance(arg0, ast.Str) and arg0.s.lower() in insecure_algorithms:
+		confidence = bandit.HIGH
+	elif isinstance(arg0, ast.Name):
+		algorithms = tuple(s_utils.iter_expr_literal_values(parent, arg0, call_node))
+		if algorithms and all(algo.lower() in insecure_algorithms for algo in algorithms):
+			confidence = bandit.HIGH
+		elif algorithms and any(algo.lower() in insecure_algorithms for algo in algorithms):
+			confidence = bandit.MEDIUM
+	if confidence is None:
+		return
+	return bandit.Issue(
+		severity=bandit.MEDIUM,
+		confidence=confidence,
+		text='Use of insecure MD2, MD4, or MD5 hash function.'
+	)
