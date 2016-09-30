@@ -93,7 +93,7 @@ def get_definition_nodes(parent, name, child=None, prune=True):
                 check_nodes.extend(node.orelse)
 
         # prune the subnodes to check so we're not including ones past the child
-        if next_node in check_nodes:
+        if next_node in check_nodes and not isinstance(next_node, (ast.ClassDef, ast.FunctionDef)):
             # todo: adjust pruning for proper namespace handling
             check_nodes = check_nodes[:check_nodes.index(next_node)]
         for node in check_nodes:
