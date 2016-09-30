@@ -4,6 +4,7 @@ import re
 import bandit
 from bandit.core import test_properties as test
 from bandit.core import utils as b_utils
+from six.moves import urllib
 
 from . import eval_ast
 from . import utils as s_utils
@@ -48,4 +49,27 @@ def paramiko_auth_literal(context):
         (2, 'username'),
         (3, 'password'),
         ('paramiko.SSHClient',)
+    )
+
+@test.checks('Assign')
+@test.test_id('SS1200')
+def flask_sqlalchemy_auth_literal(context):
+    assign_node = context.node
+    if not assign_node.targets:
+        return
+    if not s_utils.node_targets_name(assign_node, 'SQLALCHEMY_DATABASE_URI'):
+        return
+    node = s_utils.get_expr_value_src_dst(assign_node.value, assign_node.targets[0], 'SQLALCHEMY_DATABASE_URI')
+    if node is None:
+        return
+    success, value = eval_ast.literal_expr(node)
+    if not (success and isinstance(value, str)):
+        return
+    parsed_uri = urllib.parse.urlparse(value)
+    if re.match('^\w+:\w+@\w+$', parsed_uri.netloc) is None:
+        return
+    return bandit.Issue(
+        confidence=bandit.HIGH,
+        severity=bandit.HIGH,
+        text="Hard-coded credentials are defined in Flasks SQLALCHEMY_DATABASE_URI option."
     )

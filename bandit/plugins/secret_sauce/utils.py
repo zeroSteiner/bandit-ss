@@ -137,14 +137,16 @@ def get_top_parent_node(node):
     return parent
 
 
-def _get_expr_value_src_dst(src_node, dst_node, node):
+def get_expr_value_src_dst(src_node, dst_node, name):
     test_node = None
-    if isinstance(dst_node, ast.Name) and dst_node.id == node.id:
+    if isinstance(name, ast.Name):
+        name = name.id
+    if isinstance(dst_node, ast.Name) and dst_node.id == name:
         test_node = src_node
     elif isinstance(dst_node, (ast.List, ast.Tuple)) and isinstance(src_node, (ast.List, ast.Tuple)):
-        targets = [name.id for name in dst_node.elts if isinstance(name, ast.Name)]
-        if node.id in targets:
-            test_node = src_node.elts[targets.index(node.id)]
+        targets = [elt.id for elt in dst_node.elts if isinstance(elt, ast.Name)]
+        if name in targets:
+            test_node = src_node.elts[targets.index(name)]
     return test_node
 
 
@@ -174,15 +176,15 @@ def iter_expr_values(parent, node, child=None):
         src_node = None
         test_nodes.clear()
         if isinstance(def_node, ast.Assign):
-            test_node = _get_expr_value_src_dst(def_node.value, def_node.targets[0], node)
+            test_node = get_expr_value_src_dst(def_node.value, def_node.targets[0], node)
             if test_node:
                 test_nodes.append(test_node)
         elif isinstance(def_node, ast.For):
-            src_node = _get_expr_value_src_dst(def_node.iter, def_node.target, node)
+            src_node = get_expr_value_src_dst(def_node.iter, def_node.target, node)
             each = node_is_child_of_parent(def_node.body, next_node)
         elif isinstance(def_node, ast.ListComp):
             for generator in def_node.generators:
-                src_node = _get_expr_value_src_dst(generator.iter, generator.target, node)
+                src_node = get_expr_value_src_dst(generator.iter, generator.target, node)
                 if src_node:
                     break
 

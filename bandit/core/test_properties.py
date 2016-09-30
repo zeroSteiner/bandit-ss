@@ -16,6 +16,7 @@
 
 import logging
 
+from bandit.core import constants
 from bandit.core import utils
 
 LOG = logging.getLogger(__name__)
@@ -83,3 +84,13 @@ def accepts_baseline(*args):
 
         return func
     return wrapper(args[0])
+
+def run_phase(phase):
+    """Set a test to run during a particular phase."""
+    if not phase in constants.SEQUENCE:
+        raise ValueError('phase is not a valid value')
+    def _set_phase(func):
+        if not hasattr(func, '_run_phase'):
+            func._run_phase = phase
+        return func
+    return _set_phase

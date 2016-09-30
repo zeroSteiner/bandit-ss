@@ -130,7 +130,7 @@ class BanditNodeVisitor(object):
         '''
         module = node.module
         if module is None:
-            return self.visit_Import(node)
+            return self.visit_Import(node, phase)
 
         for nodename in node.names:
             # TODO(ljfisher) Names in import_aliases could be overridden
@@ -194,6 +194,7 @@ class BanditNodeVisitor(object):
                 LOG.debug("skipped, nosec")
                 self.metrics.note_nosec()
                 return False
+
         if preprocess:
             return True
 
@@ -244,6 +245,7 @@ class BanditNodeVisitor(object):
                     else:
                         setattr(item, 'sibling', None)
                     setattr(item, 'parent', node)
+                    setattr(item, 'storage', {})
                     if not self.pre_visit(item, preprocess=True):
                         continue
                     self.preprocess_nodes(item)
@@ -252,6 +254,7 @@ class BanditNodeVisitor(object):
             elif isinstance(value, ast.AST):
                 setattr(value, 'sibling', None)
                 setattr(value, 'parent', node)
+                setattr(value, 'storage', {})
                 if not self.pre_visit(value, preprocess=True):
                     continue
                 self.preprocess_nodes(value)
