@@ -55,7 +55,7 @@ class BanditNodeVisitor(object):
         LOG.debug('Module qualified name: %s', self.namespace)
         self.metrics = metrics
 
-    def visit_ClassDef(self, node):
+    def visit_ClassDef(self, node, phase):
         '''Visitor for AST ClassDef node
 
         Add class name to current namespace for all descendants.
@@ -65,7 +65,7 @@ class BanditNodeVisitor(object):
         # For all child nodes, add this class name to current namespace
         self.namespace = b_utils.namespace_path_join(self.namespace, node.name)
 
-    def visit_FunctionDef(self, node):
+    def visit_FunctionDef(self, node, phase):
         '''Visitor for AST FunctionDef nodes
 
         add relevant information about the node to
@@ -85,9 +85,9 @@ class BanditNodeVisitor(object):
         # For all child nodes and any tests run, add this function name to
         # current namespace
         self.namespace = b_utils.namespace_path_join(self.namespace, name)
-        self.update_scores(self.tester.run_tests(self.context, 'FunctionDef'))
+        self.update_scores(self.tester.run_tests(self.context, 'FunctionDef', phase=phase))
 
-    def visit_Call(self, node):
+    def visit_Call(self, node, phase):
         '''Visitor for AST Call nodes
 
         add relevant information about the node to
@@ -103,9 +103,9 @@ class BanditNodeVisitor(object):
         self.context['qualname'] = qualname
         self.context['name'] = name
 
-        self.update_scores(self.tester.run_tests(self.context, 'Call'))
+        self.update_scores(self.tester.run_tests(self.context, 'Call', phase=phase))
 
-    def visit_Import(self, node):
+    def visit_Import(self, node, phase):
         '''Visitor for AST Import nodes
 
         add relevant information about node to
@@ -118,9 +118,9 @@ class BanditNodeVisitor(object):
                 self.import_aliases[nodename.asname] = nodename.name
             self.imports.add(nodename.name)
             self.context['module'] = nodename.name
-        self.update_scores(self.tester.run_tests(self.context, 'Import'))
+        self.update_scores(self.tester.run_tests(self.context, 'Import', phase=phase))
 
-    def visit_ImportFrom(self, node):
+    def visit_ImportFrom(self, node, phase):
         '''Visitor for AST ImportFrom nodes
 
         add relevant information about node to
@@ -150,9 +150,9 @@ class BanditNodeVisitor(object):
             self.imports.add(module + "." + nodename.name)
             self.context['module'] = module
             self.context['name'] = nodename.name
-        self.update_scores(self.tester.run_tests(self.context, 'ImportFrom'))
+        self.update_scores(self.tester.run_tests(self.context, 'ImportFrom', phase=phase))
 
-    def visit_Str(self, node):
+    def visit_Str(self, node, phase):
         '''Visitor for AST String nodes
 
         add relevant information about node to
@@ -163,9 +163,9 @@ class BanditNodeVisitor(object):
         self.context['str'] = node.s
         if not isinstance(node.parent, ast.Expr):  # docstring
             self.context['linerange'] = b_utils.linerange_fix(node.parent)
-            self.update_scores(self.tester.run_tests(self.context, 'Str'))
+            self.update_scores(self.tester.run_tests(self.context, 'Str', phase=phase))
 
-    def visit_Bytes(self, node):
+    def visit_Bytes(self, node, phase):
         '''Visitor for AST Bytes nodes
 
         add relevant information about node to
@@ -176,9 +176,9 @@ class BanditNodeVisitor(object):
         self.context['bytes'] = node.s
         if not isinstance(node.parent, ast.Expr):  # docstring
             self.context['linerange'] = b_utils.linerange_fix(node.parent)
-            self.update_scores(self.tester.run_tests(self.context, 'Bytes'))
+            self.update_scores(self.tester.run_tests(self.context, 'Bytes', phase=phase))
 
-    def pre_visit(self, node):
+    def pre_visit(self, node, preprocess=False):
         self.context = {}
         self.context['imports'] = self.imports
         self.context['import_aliases'] = self.import_aliases
@@ -194,7 +194,11 @@ class BanditNodeVisitor(object):
                 LOG.debug("skipped, nosec")
                 self.metrics.note_nosec()
                 return False
+        if preprocess:
+            return True
 
+        self.context['imports'] = self.imports
+        self.context['import_aliases'] = self.import_aliases
         self.context['node'] = node
         self.context['linerange'] = b_utils.linerange_fix(node)
         self.context['filename'] = self.fname
@@ -206,7 +210,8 @@ class BanditNodeVisitor(object):
         LOG.debug(self.context)
         return True
 
-    def visit(self, node):
+    def visit(self, node, phase=None):
+        phase = phase or constants.PRIMARY
         name = node.__class__.__name__
         method = 'visit_' + name
         visitor = getattr(self, method, None)
@@ -215,7 +220,7 @@ class BanditNodeVisitor(object):
                 LOG.debug("%s called (%s)", method, ast.dump(node))
             visitor(node)
         else:
-            self.update_scores(self.tester.run_tests(self.context, name))
+            self.update_scores(self.tester.run_tests(self.context, name, phase=phase))
 
     def post_visit(self, node):
         self.depth -= 1
@@ -226,32 +231,52 @@ class BanditNodeVisitor(object):
         if isinstance(node, ast.FunctionDef) or isinstance(node, ast.ClassDef):
             self.namespace = b_utils.namespace_path_split(self.namespace)[0]
 
-    def generic_visit(self, node):
-        """Drive the visitor."""
+    def preprocess_nodes(self, node):
+        """Run preprocessors on nodes for the visitor."""
         for _, value in ast.iter_fields(node):
             if isinstance(value, list):
                 max_idx = len(value) - 1
                 for idx, item in enumerate(value):
-                    if isinstance(item, ast.AST):
-                        if idx < max_idx:
-                            setattr(item, 'sibling', value[idx + 1])
-                        else:
-                            setattr(item, 'sibling', None)
-                        setattr(item, 'parent', node)
-
-                        if self.pre_visit(item):
-                            self.visit(item)
-                            self.generic_visit(item)
-                            self.post_visit(item)
+                    if not isinstance(item, ast.AST):
+                        continue
+                    if idx < max_idx:
+                        setattr(item, 'sibling', value[idx + 1])
+                    else:
+                        setattr(item, 'sibling', None)
+                    setattr(item, 'parent', node)
+                    if not self.pre_visit(item, preprocess=True):
+                        continue
+                    self.preprocess_nodes(item)
+                    self.post_visit(item)
 
             elif isinstance(value, ast.AST):
                 setattr(value, 'sibling', None)
                 setattr(value, 'parent', node)
+                if not self.pre_visit(value, preprocess=True):
+                    continue
+                self.preprocess_nodes(value)
+                self.post_visit(value)
 
-                if self.pre_visit(value):
-                    self.visit(value)
-                    self.generic_visit(value)
-                    self.post_visit(value)
+    def generic_visit(self, node, phase=None):
+        """Drive the visitor."""
+        phase = phase or constants.PRIMARY
+        for _, value in ast.iter_fields(node):
+            if isinstance(value, list):
+                for item in value:
+                    if not isinstance(item, ast.AST):
+                        continue
+                    if not self.pre_visit(item):
+                        continue
+                    self.visit(item, phase=phase)
+                    self.generic_visit(item, phase=phase)
+                    self.post_visit(item)
+
+            elif isinstance(value, ast.AST):
+                if not self.pre_visit(value):
+                    continue
+                self.visit(value, phase=phase)
+                self.generic_visit(value, phase=phase)
+                self.post_visit(value)
 
     def update_scores(self, scores):
         '''Score updater
@@ -275,5 +300,7 @@ class BanditNodeVisitor(object):
         :return score: the aggregated score for the current file
         '''
         f_ast = ast.parse(data)
-        self.generic_visit(f_ast)
+        self.preprocess_nodes(f_ast)
+        for phase in constants.SEQUENCE:
+            self.generic_visit(f_ast, phase)
         return self.scores

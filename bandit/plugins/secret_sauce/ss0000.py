@@ -59,13 +59,13 @@ def _looks_like_sql_string(data):
             val.startswith('delete from '))
 
 
-def _check_string_for_sql(ast_str):
+def _check_string_for_sql(ast_str, confidence=None, severity=None):
     string = ast_str.s
     if not _looks_like_sql_string(string):
         return
     return bandit.Issue(
-        severity=bandit.MEDIUM,
-        confidence=bandit.MEDIUM,
+        confidence=confidence or bandit.MEDIUM,
+        severity=severity or bandit.MEDIUM,
         text="Possible SQL injection vector through format string based "
              "query construction."
     )
@@ -108,7 +108,7 @@ def raw_str_sql_expressions(context):
     if isinstance(str_node.parent, ast.BinOp):
         # avoid duplicates findings with B9101
         return
-    return _check_string_for_sql(context.node)
+    return _check_string_for_sql(context.node, confidence=bandit.LOW)
 
 
 @test.checks('BinOp')

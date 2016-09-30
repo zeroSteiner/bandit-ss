@@ -20,13 +20,15 @@ plugin_name_pattern = '*.py'
 # default progress increment
 progress_increment = 50
 
-RANKING = ['UNDEFINED', 'LOW', 'MEDIUM', 'HIGH']
+RANKING = ('UNDEFINED', 'LOW', 'MEDIUM', 'HIGH')
 RANKING_VALUES = {'UNDEFINED': 1, 'LOW': 3, 'MEDIUM': 5, 'HIGH': 10}
-CRITERIA = [('SEVERITY', 'UNDEFINED'), ('CONFIDENCE', 'UNDEFINED')]
+CRITERIA = (('SEVERITY', 'UNDEFINED'), ('CONFIDENCE', 'UNDEFINED'))
+SEQUENCE = ('FIRST', 'EARLY', 'PRIMARY', 'LATE', 'LAST')
+SEQUENCE_VALUES = {'FIRST': -10, 'EARLY': -5, 'PRIMARY': 0, 'LATE': 5, 'LAST': 10}
 
 # add each ranking to globals, to allow direct access in module name space
-for rank in RANKING:
-    globals()[rank] = rank
+for const in RANKING + SEQUENCE:
+    globals()[const] = const
 
 CONFIDENCE_DEFAULT = 'UNDEFINED'
 

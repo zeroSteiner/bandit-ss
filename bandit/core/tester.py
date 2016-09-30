@@ -34,7 +34,7 @@ class BanditTester(object):
         self.debug = debug
         self.nosec_lines = nosec_lines
 
-    def run_tests(self, raw_context, checktype):
+    def run_tests(self, raw_context, checktype, phase=None):
         '''Runs all tests for a certain type of check, for example
 
         Runs all tests for a certain type of check, for example 'functions'
@@ -42,10 +42,10 @@ class BanditTester(object):
 
         :param raw_context: Raw context dictionary
         :param checktype: The type of checks to run
-        :param nosec_lines: Lines which should be skipped because of nosec
+        :param phase: The phase in which these tests are being run
         :return: a score based on the number and type of test results
         '''
-
+        phase = phase or constants.PRIMARY
         scores = {
             'SEVERITY': [0] * len(constants.RANKING),
             'CONFIDENCE': [0] * len(constants.RANKING)
@@ -54,6 +54,8 @@ class BanditTester(object):
         tests = self.testset.get_tests(checktype)
         for test in tests:
             name = test.__name__
+            if phase != getattr(test, '_run_phase', constants.PRIMARY):
+                continue
             # execute test with the an instance of the context class
             temp_context = copy.copy(raw_context)
             context = b_context.Context(temp_context)
