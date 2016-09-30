@@ -101,6 +101,22 @@ def dynamic_cmd_dispatch(context):
     )
 
 
+@test.checks('Call')
+@test.test_id('SS0110')
+def json_object_load_hook(context):
+    if not context.call_function_name_qual in ('json.JSONDecoder', 'json.load', 'json.loads'):
+        return
+    object_hook = context.call_keywords.get('object_hook')
+    if object_hook is None:
+        return
+    issue = bandit.Issue(
+        severity=bandit.MEDIUM,
+        confidence=bandit.MEDIUM,
+        text="A custom JSON object_hook '{0}' is being used to load data.".format(object_hook)
+    )
+    return issue
+
+
 @test.checks('Str')
 @test.test_id('SS0200')
 def raw_str_sql_expressions(context):
