@@ -51,13 +51,6 @@ SUBPROCESS = {
     )
 }
 
-def _looks_like_sql_string(data):
-    val = data.lower().lstrip()
-    return ((val.startswith('select ') and ' from ' in val) or
-            val.startswith('insert into') or
-            (val.startswith('update ') and ' set ' in val) or
-            val.startswith('delete from '))
-
 
 def _check_string_for_sql(ast_str, confidence=None, severity=None):
     string = ast_str.s
@@ -70,6 +63,22 @@ def _check_string_for_sql(ast_str, confidence=None, severity=None):
              "query construction."
     )
 
+
+def _looks_like_sql_string(data):
+    val = data.lower().lstrip()
+    return ((val.startswith('select ') and ' from ' in val) or
+            val.startswith('insert into') or
+            (val.startswith('update ') and ' set ' in val) or
+            val.startswith('delete from '))
+
+
+def _method_could_be_class(call_node, context, search_classes):
+    parent = s_utils.get_top_parent_node(call_node)
+    klass_found = next(
+        (klass for klass in s_utils.iter_method_classes(parent, call_node, import_aliases=context._context['import_aliases']) if klass in search_classes),
+        None
+    )
+    return klass_found is not None
 
 @test.checks('Call')
 @test.test_id('SS0100')
@@ -160,11 +169,7 @@ def ftplib_auth_literal(context):
         username = next(s_utils.get_call_arg_values(parent, call_node, arg=1, kwarg='user'), None)
         password = next(s_utils.get_call_arg_values(parent, call_node, arg=2, kwarg='passwd'), None)
     elif isinstance(call_node.func, ast.Attribute) and call_node.func.attr == 'login':
-        klass_name = next(
-            (klass for klass in s_utils.iter_method_classes(parent, call_node, import_aliases=context._context['import_aliases']) if klass in ('ftplib.FTP', 'ftplib.FTP_TLS')),
-            None
-        )
-        if klass_name is None:
+        if not _method_could_be_class(call_node, context, ('ftplib.FTP', 'ftplib.FTP_TLS')):
             return
         username = next(s_utils.get_call_arg_values(parent, call_node, arg=0, kwarg='user'), None)
         password = next(s_utils.get_call_arg_values(parent, call_node, arg=1, kwarg='passwd'), None)
@@ -263,4 +268,31 @@ def insecure_hashlib_new_algorithm(context):
         severity=bandit.MEDIUM,
         confidence=confidence,
         text='Use of insecure MD2, MD4, or MD5 hash function.'
+    )
+
+@test.checks('Call')
+@test.test_id('SS0500')
+def traversal_via_tarfile_extractall(context):
+    call_node = context.node
+    if not isinstance(call_node.func, ast.Attribute):
+        return
+    if not s_utils.get_attribute_name(call_node.func).endswith('.extractall'):
+        return
+    if not _method_could_be_class(call_node, context, ('tarfile.open')):
+        return
+    return bandit.Issue(
+        severity=bandit.MEDIUM,
+        confidence=bandit.HIGH,
+        text='Use of tarfile.extractall() can result in files being written to arbitrary locations on the file system.'
+    )
+
+@test.checks('Call')
+@test.test_id('SS0501')
+def traversal_via_shutil_unpack_archive(context):
+    if context.call_function_name_qual != 'shutil.unpack_archive':
+        return
+    return bandit.Issue(
+        severity=bandit.MEDIUM,
+        confidence=bandit.HIGH,
+        text='Use of shutil.unpack_archive() can result in files being written to arbitrary locations on the file system.'
     )

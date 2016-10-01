@@ -275,7 +275,7 @@ def gen_blacklist():
     ))
 
     sets.append(utils.build_conf_dict(
-        'import_plumbum', 'SS0001', ['shelve'],
+        'import_shelve', 'SS0001', ['shelve'],
         'Consider possible security implications associated with '
         '{name} module.',
         'LOW'
