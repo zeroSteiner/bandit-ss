@@ -276,7 +276,10 @@ def traversal_via_tarfile_extractall(context):
     call_node = context.node
     if not isinstance(call_node.func, ast.Attribute):
         return
-    if not s_utils.get_attribute_name(call_node.func).endswith('.extractall'):
+    if not isinstance(call_node.func.value, ast.Name):
+        return
+    name = s_utils.get_attribute_name(call_node.func)
+    if not (name and name.endswith('.extractall')):
         return
     if not _method_could_be_class(call_node, context, ('tarfile.open')):
         return
