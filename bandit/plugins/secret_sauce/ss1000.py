@@ -73,3 +73,18 @@ def flask_sqlalchemy_auth_literal(context):
         severity=bandit.HIGH,
         text="Hard-coded credentials are defined in Flasks SQLALCHEMY_DATABASE_URI option."
     )
+
+@test.checks('Call')
+@test.test_id('SS1300')
+def msgpack_object_load_hook(context):
+    if not context.call_function_name_qual in ('msgpack.Unpacker', 'msgpack.unpack', 'msgpack.unpackb'):
+        return
+    object_hook = context.call_keywords.get('object_hook')
+    if object_hook is None:
+        return
+    issue = bandit.Issue(
+        severity=bandit.MEDIUM,
+        confidence=bandit.MEDIUM,
+        text="A custom msgpack object_hook '{0}' is being used to load data.".format(object_hook)
+    )
+    return issue
