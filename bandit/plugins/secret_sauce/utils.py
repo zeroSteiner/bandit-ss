@@ -421,3 +421,12 @@ def report_method_auth_literal(libname, context, username, password, classes):
     username_node = next(get_call_arg_values(parent, call_node, arg=username[0], kwarg=username[1]), None)
     password_node = next(get_call_arg_values(parent, call_node, arg=password[0], kwarg=password[1]), None)
     return report_hardcoded_credentials(libname, username_node, password_node)
+
+def search_node_parents(node, klasses):
+    """Search through a nodes parents for the first parent that is an instance of klasses."""
+    parent = node
+    while parent is not None and not isinstance(parent, klasses):
+        parent = getattr(parent, 'parent', None)
+    if parent == node:
+        return None
+    return parent
