@@ -298,6 +298,17 @@ def get_call_attr_chain(call_node):
     return calls
 
 
+def get_call_function(call_node, import_aliases=None):
+    if not isinstance(call_node, ast.Call):
+        raise ValueError('call_node must be of type ast.Call')
+    if isinstance(call_node.func, ast.Attribute):
+        return get_attribute_name(call_node.func, import_aliases=import_aliases)
+    elif isinstance(call_node.func, ast.Name):
+        name = call_node.func.id
+        return import_aliases.get(name, name)
+    raise ValueError('call_node.func must be of type ast.Attribute or ast.Name')
+
+
 def get_method_class(parent, call_node, child=None):
     return next(iter_method_classes(parent, call_node, child=child), None)
 

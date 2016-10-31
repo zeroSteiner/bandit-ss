@@ -1,10 +1,12 @@
 import ast
+import itertools
 import re
 
 import bandit
 from bandit.core import test_properties as test
 from bandit.core import utils as b_utils
 
+from . import taintable
 from . import utils as s_utils
 
 SUBPROCESS = {
@@ -72,13 +74,36 @@ def _looks_like_sql_string(data):
             val.startswith('delete from '))
 
 
-def _method_could_be_class(call_node, context, search_classes):
-    parent = s_utils.get_top_parent_node(call_node)
-    klass_found = next(
-        (klass for klass in s_utils.iter_method_classes(parent, call_node, import_aliases=context._context['import_aliases']) if klass in search_classes),
-        None
-    )
-    return klass_found is not None
+def _method_could_be_class(node, context, search_classes):
+    if isinstance(node, ast.Call):
+        call_node = node
+        parent = s_utils.get_top_parent_node(call_node)
+        klass_found = next(
+            (klass for klass in s_utils.iter_method_classes(parent, call_node, import_aliases=context._context['import_aliases']) if klass in search_classes),
+            None
+        )
+        return klass_found is not None
+    elif isinstance(node, ast.FunctionDef):
+        klass_node = node.parent
+        if not isinstance(klass_node, ast.ClassDef):
+            # not sure what happened here
+            return False
+        import_aliases = context._context['import_aliases']
+        imports = context._context['imports']
+        star_imports = [imp[:-1] for imp in context._context['imports'] if imp.endswith('.*')]
+        for base_klass in klass_node.bases:
+            base_klass = base_klass.id
+            if base_klass in search_classes:
+                return True
+            if base_klass in import_aliases:
+                if import_aliases[base_klass] in search_classes:
+                    return True
+                continue
+            for star_import in star_imports:
+                if star_import + base_klass in search_classes:
+                    return True
+    else:
+        raise ValueError('node must be either an ast.Call or ast.FunctionDef instance')
 
 @test.checks('Call')
 @test.test_id('SS0100')
@@ -281,7 +306,7 @@ def traversal_via_tarfile_extractall(context):
     name = s_utils.get_attribute_name(call_node.func)
     if not (name and name.endswith('.extractall')):
         return
-    if not _method_could_be_class(call_node, context, ('tarfile.open')):
+    if not _method_could_be_class(call_node, context, ('tarfile.open',)):
         return
     return bandit.Issue(
         severity=bandit.MEDIUM,
@@ -298,4 +323,36 @@ def traversal_via_shutil_unpack_archive(context):
         severity=bandit.MEDIUM,
         confidence=bandit.HIGH,
         text='Use of shutil.unpack_archive() can result in files being written to arbitrary locations on the file system.'
+    )
+
+@test.checks('Call')
+@test.test_id('SS0502')
+def traversal_via_http_request(context):
+    if context.call_function_name_qual != 'open':
+        return
+    call_node = context.node
+    parent = s_utils.search_node_parents(call_node, (ast.ClassDef, ast.FunctionDef, ast.Module))
+    if not isinstance(parent, ast.FunctionDef):
+        return
+    method_node = parent
+    parent = s_utils.search_node_parents(method_node, (ast.ClassDef, ast.Module))
+    if not isinstance(parent, ast.ClassDef):
+        return
+    class_node = parent
+    if re.match(r'^do_(DELETE|GET|HEAD|POST|PUT)$', method_node.name) is None:
+        return
+    if not _method_could_be_class(method_node, context, ('BaseHTTPServer.BaseHTTPRequestHandler', 'http.server.BaseHTTPRequestHandler')):
+        return
+    # at this point we strongly believe that this is a call to open in an HTTP
+    # do_METHOD handler
+    arg0_node = call_node.args[0]
+    path = next((n for n in ast.walk(arg0_node) if isinstance(n, ast.Attribute) and s_utils.get_attribute_name(n) == 'self.path'), None)
+    if path is None:
+        return
+    if not taintable.TaintablePath(call_node, path, context=context):
+        return
+    return bandit.Issue(
+        severity=bandit.HIGH,
+        confidence=bandit.MEDIUM,
+        text="Path traversal detected in HTTP method handler: {0}".format(method_node.name)
     )
