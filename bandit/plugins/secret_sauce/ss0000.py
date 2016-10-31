@@ -341,15 +341,33 @@ def traversal_via_http_request(context):
     class_node = parent
     if re.match(r'^do_(DELETE|GET|HEAD|POST|PUT)$', method_node.name) is None:
         return
-    if not _method_could_be_class(method_node, context, ('BaseHTTPServer.BaseHTTPRequestHandler', 'http.server.BaseHTTPRequestHandler')):
+    if not _method_could_be_class(method_node, context, ('BaseHTTPServer.BaseHTTPRequestHandler', 'BaseHTTPServer.SimpleHTTPRequestHandler', 'http.server.BaseHTTPRequestHandler', 'http.server.SimpleHTTPRequestHandler')):
         return
     # at this point we strongly believe that this is a call to open in an HTTP
     # do_METHOD handler
     arg0_node = call_node.args[0]
-    path = next((n for n in ast.walk(arg0_node) if isinstance(n, ast.Attribute) and s_utils.get_attribute_name(n) == 'self.path'), None)
-    if path is None:
+    taint_node = None
+    is_taint_target = lambda n: isinstance(n, ast.Attribute) and s_utils.get_attribute_name(n) == 'self.path'
+    for node in ast.walk(arg0_node):
+        if is_taint_target(node):
+            taint_node = node
+            break
+        if not isinstance(node, ast.Name):
+            continue
+        for def_node in s_utils.get_definition_nodes(method_node, node, child=node):
+            if not isinstance(def_node, ast.Assign):
+                continue
+            taint_node = next((n for n in ast.walk(def_node) if is_taint_target(n)), None)
+            if taint_node is None:
+                continue
+            if taintable.TaintablePath(def_node, taint_node, context=context):
+                taint_node = node
+                break
+        if taint_node:
+            break
+    if taint_node is None:
         return
-    if not taintable.TaintablePath(call_node, path, context=context):
+    if not taintable.TaintablePath(call_node, taint_node, context=context):
         return
     return bandit.Issue(
         severity=bandit.HIGH,

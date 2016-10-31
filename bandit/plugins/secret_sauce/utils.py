@@ -86,6 +86,13 @@ def get_definition_nodes(parent, name, child=None, prune=True):
             check_nodes.extend(node.body)
         elif isinstance(node, ast.Module):
             check_nodes.extend(node.body)
+        elif isinstance(node, ast.TryExcept):
+            if next_node in node.body:
+                check_nodes.extend(node.body)
+            elif next_node in node.orelse:
+                check_nodes.extend(node.orelse)
+            else:
+                check_nodes.extend(next((h.body for h in node.handlers if next_node in h.body), []))
         elif isinstance(node, ast.While):
             if next_node in node.body:
                 check_nodes.extend(node.body)
