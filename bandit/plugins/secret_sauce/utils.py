@@ -14,7 +14,7 @@ def get_attribute_name(node, import_aliases=None):
     while isinstance(node, ast.Attribute):
         name = node.attr + '.' + name
         node = node.value
-    if isinstance(node, ast.Call):
+    if isinstance(node, (ast.Call, ast.Subscript)):
         return None
     if not isinstance(node, ast.Name):
         raise ValueError('could not resolve node for attribute')
@@ -256,7 +256,10 @@ def iter_method_classes(parent, call_node, child=None, import_aliases=None):
         if not isinstance(init_node, ast.Call):
             continue
         if isinstance(init_node.func, ast.Attribute):
-            module_name, klass_name = get_attribute_name(init_node.func).rsplit('.', 1)
+            klass_name = get_attribute_name(init_node.func)
+            if klass_name is None:
+                continue
+            module_name, klass_name = klass_name.rsplit('.', 1)
             for def_node in get_definition_nodes(parent, init_node.func.value, child=init_node):
                 if isinstance(def_node, (ast.Import, ast.ImportFrom)):
                     yield import_aliases.get(module_name, module_name) + '.' + klass_name
