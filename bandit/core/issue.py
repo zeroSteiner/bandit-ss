@@ -30,7 +30,7 @@ class Issue(object):
         self.severity = severity
         self.confidence = confidence
         if isinstance(text, bytes):
-            text = text.decode('utf-8')
+            text = text.decode('utf-8', 'ignore')
         self.text = text
         self.ident = ident
         self.fname = ""
@@ -97,7 +97,7 @@ class Issue(object):
             text = linecache.getline(self.fname, line)
 
             if isinstance(text, bytes):
-                text = text.decode('utf-8')
+                text = text.decode('utf-8', 'ignore')
 
             if not len(text):
                 break
@@ -112,7 +112,7 @@ class Issue(object):
             'test_id': self.test_id,
             'issue_severity': self.severity,
             'issue_confidence': self.confidence,
-            'issue_text': self.text.encode('utf-8').decode('utf-8'),
+            'issue_text': self.text.encode('utf-8').decode('utf-8', 'ignore'),
             'line_number': self.lineno,
             'line_range': self.linerange,
             }

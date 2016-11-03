@@ -157,6 +157,7 @@ class BanditManager(object):
                         conf_level=conf_level, lines=lines)
 
         except Exception as e:
+            traceback.print_exc()
             raise RuntimeError("Unable to output report using '%s' formatter: "
                                "%s" % (output_format, str(e)))
 
