@@ -74,37 +74,6 @@ def _looks_like_sql_string(data):
             val.startswith('delete from '))
 
 
-def _method_could_be_class(node, context, search_classes):
-    if isinstance(node, ast.Call):
-        call_node = node
-        parent = s_utils.get_top_parent_node(call_node)
-        klass_found = next(
-            (klass for klass in s_utils.iter_method_classes(parent, call_node, import_aliases=context._context['import_aliases']) if klass in search_classes),
-            None
-        )
-        return klass_found is not None
-    elif isinstance(node, ast.FunctionDef):
-        klass_node = node.parent
-        if not isinstance(klass_node, ast.ClassDef):
-            # not sure what happened here
-            return False
-        import_aliases = context._context['import_aliases']
-        imports = context._context['imports']
-        star_imports = [imp[:-1] for imp in context._context['imports'] if imp.endswith('.*')]
-        for base_klass in klass_node.bases:
-            base_klass = base_klass.id
-            if base_klass in search_classes:
-                return True
-            if base_klass in import_aliases:
-                if import_aliases[base_klass] in search_classes:
-                    return True
-                continue
-            for star_import in star_imports:
-                if star_import + base_klass in search_classes:
-                    return True
-    else:
-        raise ValueError('node must be either an ast.Call or ast.FunctionDef instance')
-
 @test.checks('Call')
 @test.test_id('SS0100')
 def dynamic_cmd_dispatch(context):
@@ -194,7 +163,7 @@ def ftplib_auth_literal(context):
         username = next(s_utils.get_call_arg_values(parent, call_node, arg=1, kwarg='user'), None)
         password = next(s_utils.get_call_arg_values(parent, call_node, arg=2, kwarg='passwd'), None)
     elif isinstance(call_node.func, ast.Attribute) and call_node.func.attr == 'login':
-        if not _method_could_be_class(call_node, context, ('ftplib.FTP', 'ftplib.FTP_TLS')):
+        if not s_utils.method_could_be_class(call_node, context, ('ftplib.FTP', 'ftplib.FTP_TLS')):
             return
         username = next(s_utils.get_call_arg_values(parent, call_node, arg=0, kwarg='user'), None)
         password = next(s_utils.get_call_arg_values(parent, call_node, arg=1, kwarg='passwd'), None)
@@ -224,7 +193,7 @@ def basic_auth_literal(context):
     if not (isinstance(call_node.func, ast.Attribute) and call_node.func.attr == 'add_header'):
         return
     klass_name = next(
-        (klass for klass in s_utils.iter_method_classes(parent, call_node, import_aliases=context._context['import_aliases']) if klass in ('urllib2.Request', 'urllib.request.Request')),
+        (klass for klass in s_utils.iter_method_classes(parent, call_node, context) if klass in ('urllib2.Request', 'urllib.request.Request')),
         None
     )
     if klass_name is None:
@@ -306,7 +275,7 @@ def traversal_via_tarfile_extractall(context):
     name = s_utils.get_attribute_name(call_node.func)
     if not (name and name.endswith('.extractall')):
         return
-    if not _method_could_be_class(call_node, context, ('tarfile.open',)):
+    if not s_utils.method_could_be_class(call_node, context, ('tarfile.open',)):
         return
     return bandit.Issue(
         severity=bandit.MEDIUM,
@@ -341,7 +310,7 @@ def traversal_via_http_request(context):
     class_node = parent
     if re.match(r'^do_(DELETE|GET|HEAD|POST|PUT)$', method_node.name) is None:
         return
-    if not _method_could_be_class(method_node, context, ('BaseHTTPServer.BaseHTTPRequestHandler', 'BaseHTTPServer.SimpleHTTPRequestHandler', 'http.server.BaseHTTPRequestHandler', 'http.server.SimpleHTTPRequestHandler')):
+    if not s_utils.method_could_be_class(method_node, context, ('BaseHTTPServer.BaseHTTPRequestHandler', 'BaseHTTPServer.SimpleHTTPRequestHandler', 'http.server.BaseHTTPRequestHandler', 'http.server.SimpleHTTPRequestHandler')):
         return
     # at this point we strongly believe that this is a call to open in an HTTP
     # do_METHOD handler

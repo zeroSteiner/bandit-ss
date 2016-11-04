@@ -244,8 +244,8 @@ def iter_imported_modules(node):
         raise ValueError('node must be an instance of either ast.Import or ast.ImportFrom')
 
 
-def iter_method_classes(parent, call_node, child=None, import_aliases=None):
-    import_aliases = import_aliases or {}
+def iter_method_classes(parent, call_node, context, child=None):
+    import_aliases = context._context['import_aliases']
     if not isinstance(call_node, ast.Call):
         raise ValueError('call_node must be of type ast.Call')
     if not isinstance(call_node.func, ast.Attribute):
@@ -264,6 +264,9 @@ def iter_method_classes(parent, call_node, child=None, import_aliases=None):
                 if isinstance(def_node, (ast.Import, ast.ImportFrom)):
                     yield import_aliases.get(module_name, module_name) + '.' + klass_name
         elif isinstance(init_node.func, ast.Name):
+            if init_node.func.id in import_aliases:
+                yield import_aliases[init_node.func.id]
+                continue
             for klass_node in iter_expr_values(parent, init_node.func):
                 if isinstance(klass_node, ast.Attribute):
                     yield get_attribute_name(klass_node, import_aliases)
@@ -319,15 +322,54 @@ def get_call_function(call_node, import_aliases=None):
     raise ValueError('call_node.func must be of type ast.Attribute or ast.Name')
 
 
-def get_method_class(parent, call_node, child=None):
-    return next(iter_method_classes(parent, call_node, child=child), None)
-
-
 def iter_child_expr_nodes(node):
     for cursor_node in ast.iter_child_nodes(node):
         yield cursor_node
         for subcursor_node in iter_child_expr_nodes(cursor_node):
             yield subcursor_node
+
+
+def name_is_imported(name, context, search_names):
+    import_aliases = context._context['import_aliases']
+    imports = context._context['imports']
+    star_imports = [imp[:-1] for imp in context._context['imports'] if imp.endswith('.*')]
+    if name in search_classes:
+        return True
+    if name in import_aliases:
+        if import_aliases[name] in search_classes:
+            return True
+        return False
+    for star_import in star_imports:
+        if star_import + name in search_classes:
+            return True
+    return False
+
+
+def method_could_be_class(node, context, search_classes):
+    if isinstance(node, ast.Call):
+        call_node = node
+        parent = get_top_parent_node(call_node)
+        klass_found = next(
+            (klass for klass in iter_method_classes(parent, call_node, context) if klass in search_classes),
+            None
+        )
+        return klass_found is not None
+    elif isinstance(node, ast.FunctionDef):
+        klass_node = node.parent
+        if not isinstance(klass_node, ast.ClassDef):
+            # not sure what happened here
+            return False
+        import_aliases = context._context['import_aliases']
+        imports = context._context['imports']
+        star_imports = [imp[:-1] for imp in context._context['imports'] if imp.endswith('.*')]
+        for base_klass in klass_node.bases:
+            base_klass = base_klass.id
+            if base_klass in search_classes:
+                return True
+            if search_imported_names(base_klass, context, search_classes):
+                return True
+    else:
+        raise ValueError('node must be either an ast.Call or ast.FunctionDef instance')
 
 
 def node_defines_name(node, name):
@@ -434,7 +476,7 @@ def report_method_auth_literal(libname, context, username, password, classes):
     call_node = context.node
     parent = get_top_parent_node(call_node)
     klass_name = next(
-        (klass for klass in iter_method_classes(parent, call_node, import_aliases=context._context['import_aliases']) if klass in classes),
+        (klass for klass in iter_method_classes(parent, call_node, context) if klass in classes),
         None
     )
     if klass_name is None:

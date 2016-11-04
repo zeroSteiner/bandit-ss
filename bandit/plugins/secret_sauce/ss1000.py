@@ -88,3 +88,32 @@ def msgpack_object_load_hook(context):
         text="A custom msgpack object_hook '{0}' is being used to load data.".format(object_hook)
     )
     return issue
+
+@test.checks('Call')
+@test.test_id('SS1400')
+def tornado_exec_in(context):
+    if not context.call_function_name_qual == 'tornado.util.exec_in':
+        return
+    issue = bandit.Issue(
+        severity=bandit.HIGH,
+        confidence=bandit.HIGH,
+        text="Use of tornado.util.exec_in detected, leads to exec call."
+    )
+    return issue
+
+@test.checks('Call')
+@test.test_id('SS1401')
+def tornado_parse_config_file(context):
+    call_node = context.node
+    if not isinstance(call_node.func, ast.Attribute):
+        return
+    if call_node.func.attr != 'parse_config_file':
+        return
+    if not s_utils.method_could_be_class(call_node, context, ('tornado.options.OptionParser',)):
+        return
+    issue = bandit.Issue(
+        severity=bandit.HIGH,
+        confidence=bandit.HIGH,
+        text="Use of tornado.options.OptionParser.parse_config_file detected, leads to exec call."
+    )
+    return issue
