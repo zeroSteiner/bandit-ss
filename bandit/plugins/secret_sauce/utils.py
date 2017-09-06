@@ -329,9 +329,8 @@ def iter_child_expr_nodes(node):
             yield subcursor_node
 
 
-def name_is_imported(name, context, search_names):
+def name_is_imported(name, context, search_classes):
     import_aliases = context._context['import_aliases']
-    imports = context._context['imports']
     star_imports = [imp[:-1] for imp in context._context['imports'] if imp.endswith('.*')]
     if name in search_classes:
         return True
@@ -359,14 +358,11 @@ def method_could_be_class(node, context, search_classes):
         if not isinstance(klass_node, ast.ClassDef):
             # not sure what happened here
             return False
-        import_aliases = context._context['import_aliases']
-        imports = context._context['imports']
-        star_imports = [imp[:-1] for imp in context._context['imports'] if imp.endswith('.*')]
         for base_klass in klass_node.bases:
             base_klass = base_klass.id
             if base_klass in search_classes:
                 return True
-            if search_imported_names(base_klass, context, search_classes):
+            if name_is_imported(base_klass, context, search_classes):
                 return True
     else:
         raise ValueError('node must be either an ast.Call or ast.FunctionDef instance')
@@ -484,6 +480,7 @@ def report_method_auth_literal(libname, context, username, password, classes):
     username_node = next(get_call_arg_values(parent, call_node, arg=username[0], kwarg=username[1]), None)
     password_node = next(get_call_arg_values(parent, call_node, arg=password[0], kwarg=password[1]), None)
     return report_hardcoded_credentials(libname, username_node, password_node)
+
 
 def search_node_parents(node, klasses):
     """Search through a nodes parents for the first parent that is an instance of klasses."""
