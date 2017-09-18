@@ -219,7 +219,7 @@ class BanditNodeVisitor(object):
         if visitor is not None:
             if self.debug:
                 LOG.debug("%s called (%s)", method, ast.dump(node))
-            visitor(node)
+            visitor(node, phase)
         else:
             self.update_scores(self.tester.run_tests(self.context, name, phase=phase))
 
