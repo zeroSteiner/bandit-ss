@@ -63,7 +63,7 @@ def get_definition_nodes(parent, name, child=None, prune=True):
             if node.name == name:
                 _check_and_add_node(node, top_level=True)
         elif isinstance(node, ast.ExceptHandler):
-            if node.name.id == name:
+            if (node.name.id if isinstance(node.name, ast.Name) else node.name) == name:
                 _check_and_add_node(node, top_level=True)
             check_nodes.extend(node.body)
         elif isinstance(node, ast.For):
@@ -74,8 +74,15 @@ def get_definition_nodes(parent, name, child=None, prune=True):
             elif next_node in node.orelse:
                 check_nodes.extend(node.orelse)
         elif isinstance(node, ast.FunctionDef):
-            if node.name == name or name in [arg.id for arg in node.args.args]:
+            if node.name == name:
                 _check_and_add_node(node, top_level=True)
+            elif node.args.args:
+                if hasattr(ast, 'arg'):
+                    arg_names = [arg.arg for arg in node.args.args]
+                else:
+                    arg_names = [arg.id for arg in node.args.args]
+                if name in arg_names:
+                    _check_and_add_node(node, top_level=True)
             check_nodes.extend(node.body)
         elif isinstance(node, ast.If):
             if next_node in node.body:
@@ -86,7 +93,7 @@ def get_definition_nodes(parent, name, child=None, prune=True):
             check_nodes.extend(node.body)
         elif isinstance(node, ast.Module):
             check_nodes.extend(node.body)
-        elif isinstance(node, ast.TryExcept):
+        elif isinstance(node, (ast.Try if hasattr(ast, 'Try') else ast.TryExcept)):
             if next_node in node.body:
                 check_nodes.extend(node.body)
             elif next_node in node.orelse:
@@ -402,6 +409,8 @@ def node_defines_name(node, name):
     elif isinstance(node, ast.ExceptHandler):
         if isinstance(node.name, ast.Name):
             return node.name.id == name
+        elif isinstance(node.name, str):
+            return node.name == name
     elif isinstance(node, ast.Expr):
         if isinstance(node.value, (ast.DictComp, ast.GeneratorExp, ast.ListComp, ast.SetComp)):
             return node_defines_name(node.value, name)
